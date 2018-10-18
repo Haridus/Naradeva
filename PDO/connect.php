@@ -28,11 +28,10 @@
 	{
 		global $g_defConnect;
 		if( !$g_defConnect ){
-			$config = getDefaultConfig();
-			$adaptor = getDefaultAdaptor();
+                    $config = getDefaultConfig();
+                    $adaptor = getDefaultAdaptor();
 		    $g_defConnect = $adaptor->connect($config);
 		}
 		return $g_defConnect;
-	}
-	
+        }
 ?>

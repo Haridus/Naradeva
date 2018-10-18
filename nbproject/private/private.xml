@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project-private xmlns="http://www.netbeans.org/ns/project-private/1">
+    <editor-bookmarks xmlns="http://www.netbeans.org/ns/editor-bookmarks/2" lastBookmarkId="0"/>
+    <open-files xmlns="http://www.netbeans.org/ns/projectui-open-files/2">
+        <group>
+            <file>file:/C:/wamp/www/civilhelper/handlers/CreateDeleteUserHandler.php</file>
+            <file>file:/C:/wamp/www/civilhelper/handlers/UserRequestsHandler.php</file>
+            <file>file:/C:/wamp/www/civilhelper/request.php</file>
+            <file>file:/C:/wamp/www/civilhelper/general/validate/phones.php</file>
+            <file>file:/C:/wamp/www/civilhelper/handlers/PulseHandler.php</file>
+            <file>file:/C:/wamp/www/civilhelper/AppTables.php</file>
+            <file>file:/C:/wamp/www/civilhelper/LocalSettings.php</file>
+            <file>file:/C:/wamp/www/civilhelper/PDO/Mysql.php</file>
+            <file>file:/C:/wamp/www/civilhelper/general/validate/validate.php</file>
+            <file>file:/C:/wamp/www/civilhelper/processingExeption.php</file>
+            <file>file:/C:/wamp/www/civilhelper/handlers/OperationsHandlersBase.php</file>
+            <file>file:/C:/wamp/www/civilhelper/operationHandler.php</file>
+            <file>file:/C:/wamp/www/civilhelper/log.log</file>
+            <file>file:/C:/wamp/www/civilhelper/handlers/ChangeUserInfoHandler.php</file>
+            <file>file:/C:/wamp/www/civilhelper/handlers/HelpersRequestsHandler.php</file>
+            <file>file:/C:/wamp/www/civilhelper/PDO/BaseAdapter.php</file>
+            <file>file:/C:/wamp/www/civilhelper/general/stump/stump.php</file>
+            <file>file:/C:/wamp/www/civilhelper/general/notification/notification.php</file>
+            <file>file:/C:/wamp/www/civilhelper/user.php</file>
+            <file>file:/C:/wamp/www/civilhelper/general/mail/mail.php</file>
+            <file>file:/C:/wamp/www/civilhelper/response.php</file>
+            <file>file:/C:/wamp/www/civilhelper/mails.dump</file>
+            <file>file:/C:/wamp/www/civilhelper/general/query/query.php</file>
+            <file>file:/C:/wamp/www/civilhelper/general/encrypt_decrypt/encrypt_decrypt_string.php</file>
+            <file>file:/C:/wamp/www/civilhelper/install.php</file>
+            <file>file:/C:/wamp/www/civilhelper/operation.php</file>
+            <file>file:/C:/wamp/www/civilhelper/handlers/GetUserInfoHandler.php</file>
+            <file>file:/C:/wamp/www/civilhelper/index.php</file>
+            <file>file:/C:/wamp/www/civilhelper/error.php</file>
+            <file>file:/C:/wamp/www/civilhelper/general/ip/ip.php</file>
+            <file>file:/C:/wamp/www/civilhelper/handlers/LoginLogoutHandler.php</file>
+            <file>file:/C:/wamp/www/civilhelper/PDO/Sqlite.php</file>
+            <file>file:/C:/wamp/www/civilhelper/PDO/connect.php</file>
+            <file>file:/C:/wamp/www/civilhelper/PDO/Pgsql.php</file>
+            <file>file:/C:/wamp/www/civilhelper/handlers/ConfirmUserInformation.php</file>
+        </group>
+    </open-files>
+</project-private>

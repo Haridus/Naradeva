@@ -1,176 +1,503 @@
 <?php
 	require_once('error.php');
 	require_once('processingExeption.php');
+        require_once './user.php';
 
 //---------------------------------------------------------------------------------------------------
-	class Operations
+    class OperationFlags
+    {
+        CONST UNSUPPORTED = 0x0;
+        CONST URGENT = 0x1;
+        CONST ADMIN  = 0x2;
+        CONST USER   = 0x4;
+        CONST HELPER = 0x8;
+        CONST ALL = 0xffffff;
+    }
+    
+    class OperationParameterFlags
+    {
+        CONST NO_FLAGS  = 0x0;
+        CONST MANDATORY = 0x1;
+    }
+    
+    class OperationParameterType
+    {
+        CONST NO_TYPE = 0x0;
+        CONST TEXT    = 0x1;
+        CONST MAIL    = 0x2;
+        CONST PHONE   = 0x3;
+        CONST DIGIT   = 0x4;
+        CONST DOUBLE  = 0x5;
+        CONST TIME    = 0x6;
+    }
+    
+//--------------------------------------------------------------------------------------------
+    class OperationParameter
+    {
+        public $name = "";
+        public $type = OperationParameterType::NO_TYPE;
+        public $flags = OperationParameterFlags::NO_FLAGS;
+        public $defValue = NULL;
+        
+        public function __construct(...$metadata)//parameter metadata
+        {  
+            if( is_array( $metadata[0] ) ){
+                $metadata = $metadata[0];
+            }
+            
+            $mdcount    = count($metadata);
+            $this->name = $metadata[0];
+            $this->type = $metadata[1];
+            if( $mdcount > 1 ){
+                $this->flags = $metadata[2];
+            }
+            if( $mdcount >2 ){
+                $this->defValue = $metadata[3];
+            }
+        }
+    }
+    
+    class OperationValidator
+    {   
+        public $opMetadata = NULL;
+        
+        public function __construct($opMetadata = NULL)
+        {
+            $this->opMetadata = $opMetadata;
+        }
+        
+        public function validate(&$args)
+        {
+            $result = TRUE;           
+          //  echo var_dump($args);
+            if( $this->opMetadata ){
+                $iargs = array();
+                $parameters = $this->opMetadata['parameters'];
+            //    echo var_dump($parameters);
+                if( count($args) > count( $parameters ) ){
+                //    echo 'args count mismatch<br>';
+                    $result = FALSE;
+                }
+                else{
+                    for( $i = 0; $i < count($parameters); $i++ ){
+                        $parameter = new OperationParameter( $parameters[$i] );
+                        $value = NULL;
+
+                        $index_exists = array_key_exists($i,$args);
+
+                        if( !$index_exists or strlen( $args[$i] ) == 0 ){
+                            if( ( $parameter->flags & OperationParameterFlags::MANDATORY > 0 ) ){
+                                $result = FALSE;
+                                break;
+                            }
+                            elseif( ( $parameter->defValue ) ){
+                                $value = $parameter->defValue;
+                            }
+                        }
+                        else{
+                            $value = $args[$i];
+                        }
+                        
+                    //    echo "value:".$value."<br>";
+
+                        if( strlen( $value ) > 0 ){
+                            switch ($parameter->type){
+                                case OperationParameterType::NO_TYPE:
+                        //            echo 'NO_TYPE<br>';
+                                    break;
+                                case OperationParameterType::TEXT:
+                        //            echo 'TEXT<br>';
+                                    break;
+                                case OperationParameterType::MAIL:
+                        //            echo 'MAIL<br>';
+                                    $result = validate_mail($value);
+                                    break;
+                                case OperationParameterType::PHONE:
+                        //            echo 'PHONE<br>';
+                                    $value = urldecode($value);
+                                    if( $value[0] != '+' ){
+                                        $value = "+".$value;                                        
+                                    }
+                                    $result = validate_phone($value);
+                                    break;
+                                case OperationParameterType::DIGIT:
+                        //            echo 'DIGIT<br>';
+                                    if(is_numeric($value) ){
+                                        $value = intval($value);
+                                    }
+                                    else{
+                                        $result = FALSE;
+                                    }
+                                    break;
+                                case OperationParameterType::DOUBLE:
+                        //            echo 'DOUBLE<br>';
+                                    if(is_numeric($value) ){
+                                        $value = floatval($value);
+                                    }
+                                    else{
+                                        $result = FALSE;
+                                    }
+                                    break;
+                                default:
+                                    break;
+                            }
+                        }
+
+                        //echo $parameter->name." ".$value." ".intval($result)."<br>";
+
+                        if( $result == FALSE ){
+                            break;
+                        }
+                        else{
+                            $iargs[$i] = $value;
+                            $iargs[$parameter->name] = $value;
+                        }
+                    }
+                }
+            }
+            if( $result ){               
+                $args = $iargs;                
+            }
+            return $result;
+        }        
+    }
+    
+//------------------------------------------------------------------------------    
+    class Operations
+    {
+    //------general--------------------
+        CONST LOGIN       = "login";  //type login pass
+        CONST LOGIN_LMP   = "lmplogin";//type login pass
+	CONST LOGOUT      = "logout"; //no
+	CONST REGISTRATE  = "registrate";//key login pass mail phone 
+//	CONST CREATE_USER = "create_user";//type login pass mail phone [deprecated]
+	CONST DELETE_USER = "delete_user";//stump
+	
+        CONST GET_USER        = "get_user";   //type login mail phone
+        CONST GET_USER_INFO   = "get_user_info";//stump
+        
+        CONST GET_USERS_COUNT = "get_users_count";//type
+	CONST GET_USERS_LIST  = "get_users_list";//type offset count
+	
+        CONST CHANGE_PASSWORD     = "change_password"; //stump pass
+        CONST CHANGE_CONTACT_DATA = "change_contact_data";//stump mail phone
+        CONST CHANGE_PROFILE_DATA = "change_profile_data";//stump dataString
+//        CONST CHANGE_RIGHTS       = "change_rights"; //stump rights [deprecated]
+        
+        CONST RESTORE_PASSWORD = "restore_password";//lmp
+                
+        CONST GET_HELPERS_CANDIDATES_COUNT = "get_helpers_candidates_count"; //no
+        CONST GET_HELPERS_CANDIDATES_LIST  = "get_helpers_candidates_list";  //offset count
+        CONST GET_HELPERS_IN_REGION        = "get_helpers_in_region";        //sh1 dl1 sh2 dl2 cats  
+        CONST SET_HELPERS_DATA_CHECKED     = "set_helpers_data_checked";     //stump ok
+        CONST ADMITT_HELPER  = "admitt_helper";//stump ok
+	CONST SET_HELPER_DATA_CHECKED_AND_ADMITT = "set_helpers_data_checked_and_admitt";//stump {[checked],[admitted]} 
+        
+        CONST PULSE    = "pulse";      //sh dl signal
+        
+        CONST ADD_REQUEST   = "add_request"; //user_name user_phone sh dl cats specats help_req reward text 
+	CONST CHANGE_REQUEST = "change_request";//stump?user_phone  sh dl cats specats help_req reward text
+	CONST CLOSE_REQUEST = "close_request";//stump result comment
+	CONST GET_REQUEST_BY_PHONE = "get_request_by_phone"; //user_phone
+        CONST GET_CURRENT_REQUEST = "get_current_request"; //no
+        CONST GET_REQUEST_INFO = "get_request_info";//stump
+	
+        CONST GET_REQUESTS_LIST = "get_requests_list";//sh dl cats specats sort
+	CONST TAKE_UP_CALL = "take_up_call";//reqstump
+	CONST GIVE_UP_CALL = "give_up_call";//reqstump
+        
+        CONST CONFIRM_USER_DATA     = "confirm_user_data";
+        
+//---------------------------------------------------------
+	public static $argsValidators = [];
+		
+        public static $metadata = [ Operations::LOGIN                         =>['id' => 1,
+                                                                                 'flags' => OperationFlags::URGENT|OperationFlags::ADMIN|OperationFlags::USER|OperationFlags::HELPER,
+                                                                                 'parameters' => array( array('type' ,OperationParameterType::TEXT,OperationParameterFlags::MANDATORY,NULL ),
+                                                                                                        array('login',OperationParameterType::TEXT,OperationParameterFlags::MANDATORY,NULL ),
+                                                                                                        array('pass' ,OperationParameterType::TEXT,OperationParameterFlags::MANDATORY,NULL )
+                                                                                                      )
+                                                                                ],
+                                    Operations::LOGIN_LMP                     =>['id' => 2,
+                                                                                 'flags' => OperationFlags::URGENT|OperationFlags::ADMIN|OperationFlags::USER|OperationFlags::HELPER,
+                                                                                 'parameters' => array( array('type' ,OperationParameterType::TEXT,OperationParameterFlags::MANDATORY,NULL ),
+                                                                                                        array('login',OperationParameterType::TEXT,OperationParameterFlags::MANDATORY,NULL ),
+                                                                                                        array('pass' ,OperationParameterType::TEXT,OperationParameterFlags::MANDATORY,NULL )
+                                                                                                      )
+                                                                                ],                                           
+                                    Operations::LOGOUT                        =>['id' => 3,
+                                                                                 'flags' => OperationFlags::URGENT|OperationFlags::ADMIN|OperationFlags::USER|OperationFlags::HELPER,
+                                                                                 'parameters' => array()
+                                                                                ],
+                                    Operations::REGISTRATE                    =>['id' => 4,
+                                                                                 'flags' => OperationFlags::URGENT|OperationFlags::USER,
+                                                                                 'parameters' => array( array('key' ,OperationParameterType::TEXT, OperationParameterFlags::MANDATORY,NULL ),
+                                                                                                        array('login',OperationParameterType::TEXT,OperationParameterFlags::MANDATORY,NULL ),
+                                                                                                        array('pass' ,OperationParameterType::TEXT,OperationParameterFlags::MANDATORY,NULL ),
+                                                                                                        array('mail' ,OperationParameterType::MAIL,OperationParameterFlags::MANDATORY,NULL ),
+                                                                                                        array('phone',OperationParameterType::PHONE,OperationParameterFlags::MANDATORY,NULL ),
+                                                                                                        array('locale',OperationParameterType::TEXT,OperationParameterFlags::NO_FLAGS, AppSettings::defaultLocale )    
+                                                                                                      )
+                                                                                ],
+//                                    Operations::CREATE_USER                   =>['id' => 5, [deprecated]
+//                                                                                 'flags' => OperationFlags::URGENT|OperationFlags::ADMIN,
+//                                                                                 'parameters' => array(array('type' ,OperationParameterType::TEXT,OperationParameterFlags::MANDATORY,NULL ),
+//                                                                                                       array('login',OperationParameterType::TEXT,OperationParameterFlags::MANDATORY,NULL ),
+//                                                                                                       array('pass' ,OperationParameterType::TEXT,OperationParameterFlags::MANDATORY,NULL ),
+//                                                                                                       array('mail' ,OperationParameterType::TEXT,OperationParameterFlags::MANDATORY,NULL ),
+//                                                                                                       array('phone',OperationParameterType::TEXT,OperationParameterFlags::MANDATORY,NULL ),
+//                                                                                                       array('locale',OperationParameterType::TEXT,OperationParameterFlags::NO_FLAGS, AppSettings::defaultLocale )
+//                                                                                                      )
+//                                                                                ],
+                                    Operations::DELETE_USER                   =>['id' => 6,
+                                                                                 'flags' => OperationFlags::URGENT|OperationFlags::ADMIN,
+                                                                                 'parameters' => array(array('stump' ,OperationParameterType::TEXT, OperationParameterFlags::MANDATORY,NULL ))
+                                                                                ],
+                                    Operations::GET_USER                      =>['id' => 7,
+                                                                                 'flags' => OperationFlags::ADMIN,
+                                                                                 'parameters' => array(array('type' ,OperationParameterType::TEXT, OperationParameterFlags::NO_FLAGS,NULL ),
+                                                                                                       array('login',OperationParameterType::TEXT, OperationParameterFlags::NO_FLAGS,NULL ),
+                                                                                                       array('mail' ,OperationParameterType::MAIL, OperationParameterFlags::NO_FLAGS,NULL ),
+                                                                                                       array('phone',OperationParameterType::PHONE, OperationParameterFlags::NO_FLAGS,NULL )
+                                                                                                      )
+                                                                                ],
+                                    Operations::GET_USER_INFO                 =>['id' => 8,
+                                                                                 'flags' => OperationFlags::ADMIN|OperationFlags::USER|OperationFlags::HELPER,
+                                                                                 'parameters' => array(array('stump' ,OperationParameterType::TEXT, OperationParameterFlags::MANDATORY,NULL ))
+                                                                                ],
+                                    Operations::GET_USERS_COUNT               =>['id' => 9,
+                                                                                 'flags' => OperationFlags::URGENT|OperationFlags::ADMIN,
+                                                                                 'parameters' => array(array('type' ,OperationParameterType::TEXT, OperationParameterFlags::MANDATORY,NULL ))
+                                                                                ],
+                                    Operations::GET_USERS_LIST                =>['id' => 10,
+                                                                                 'flags' => OperationFlags::URGENT|OperationFlags::ADMIN,
+                                                                                 'parameters' => array( array('type',OperationParameterType::TEXT, OperationParameterFlags::MANDATORY,NULL ),
+                                                                                                        array('offset',OperationParameterType::DIGIT, OperationParameterFlags::MANDATORY,NULL ),
+                                                                                                        array('count',OperationParameterType::DIGIT, OperationParameterFlags::MANDATORY,NULL )
+                                                                                                      )
+                                                                                ],					   
+                                    Operations::ADD_REQUEST                   =>['id' => 11,
+                                                                                 'flags' => OperationFlags::URGENT|OperationFlags::USER, //user_name user_phone sh dl cats specats help_req reward text 
+                                                                                 'parameters' => array(array('key',OperationParameterType::TEXT, OperationParameterFlags::MANDATORY    ,NULL ),
+                                                                                                       array('user_name',OperationParameterType::TEXT, OperationParameterFlags::MANDATORY    ,NULL ),
+                                                                                                       array('user_phone',OperationParameterType::PHONE, OperationParameterFlags::MANDATORY    ,NULL ),
+                                                                                                       array('sh',OperationParameterType::DOUBLE, OperationParameterFlags::MANDATORY    ,NULL ),
+                                                                                                       array('dl',OperationParameterType::DOUBLE, OperationParameterFlags::MANDATORY    ,NULL ),
+                                                                                                       array('cats',OperationParameterType::DIGIT, OperationParameterFlags::MANDATORY   ,NULL ),
+                                                                                                       array('specats',OperationParameterType::TEXT, OperationParameterFlags::NO_FLAGS  ,NULL ),
+                                                                                                       array('help_req',OperationParameterType::DIGIT, OperationParameterFlags::NO_FLAGS  , 1 ),
+                                                                                                       array('reward',OperationParameterType::DIGIT, OperationParameterFlags::NO_FLAGS, 5 ),
+                                                                                                       array('text',OperationParameterType::TEXT, OperationParameterFlags::NO_FLAGS, NULL)
+                                                                                                      )
+                                                                                ],
+                                    Operations::CHANGE_REQUEST                =>['id' => 12,
+                                                                                 'flags' => OperationFlags::URGENT|OperationFlags::USER,
+                                                                                 'parameters' => array(array('stump',OperationParameterType::TEXT, OperationParameterFlags::MANDATORY,NULL ),
+                                                                                                       array('cast',OperationParameterType::DIGIT, OperationParameterFlags::NO_FLAGS   ,NULL ),
+                                                                                                       array('specats',OperationParameterType::TEXT, OperationParameterFlags::NO_FLAGS  ,NULL ),
+                                                                                                       array('help_req',OperationParameterType::DIGIT, OperationParameterFlags::NO_FLAGS  , 1 ),
+                                                                                                       array('reward',OperationParameterType::DIGIT, OperationParameterFlags::NO_FLAGS, 5 ),
+                                                                                                       array('text',OperationParameterType::DIGIT, OperationParameterFlags::NO_FLAGS, NULL)
+                                                                                                      )
+                                                                                ],
+                                    Operations::GET_CURRENT_REQUEST           =>['id' => 13,
+                                                                                 'flags' => OperationFlags::URGENT|OperationFlags::USER,
+                                                                                 'parameters' => array()
+                                                                                ],
+                                    Operations::GET_REQUEST_INFO              =>['id' => 14,
+                                                                                 'flags' => OperationFlags::USER | OperationFlags::HELPER,
+                                                                                 'parameters' => array(
+                                                                                                       array('key',OperationParameterType::TEXT, OperationParameterFlags::MANDATORY, NULL ),
+                                                                                                       array('stump',OperationParameterType::TEXT, OperationParameterFlags::MANDATORY,NULL )
+                                                                                                      )
+                                                                                ],
+                                    Operations::CLOSE_REQUEST                 =>['id' => 15,
+                                                                                 'flags' => OperationFlags::URGENT|OperationFlags::USER,
+                                                                                 'parameters' => array(array('stump',OperationParameterType::TEXT  , OperationParameterFlags::MANDATORY,NULL ),
+                                                                                                       array('result',OperationParameterType::DIGIT, OperationParameterFlags::NO_FLAGS,NULL ),
+                                                                                                       array('comment',OperationParameterType::TEXT, OperationParameterFlags::NO_FLAGS,NULL ),
+                                                                                                       array('grade',OperationParameterType::DIGIT , OperationParameterFlags::NO_FLAGS,NULL )
+                                                                                                      )
+                                                                                ],
+				    Operations::GET_REQUESTS_LIST             =>['id' => 16,
+                                                                                 'flags' => OperationFlags::HELPER,
+                                                                                 'parameters' => array(array('sh',OperationParameterType::DOUBLE, OperationParameterFlags::MANDATORY  ,NULL ),
+                                                                                                       array('dl',OperationParameterType::DOUBLE, OperationParameterFlags::MANDATORY  ,NULL ),
+                                                                                                       array('cast',OperationParameterType::DIGIT, OperationParameterFlags::MANDATORY ,NULL ),
+                                                                                                       array('specats',OperationParameterType::TEXT, OperationParameterFlags::NO_FLAGS,NULL ),
+                                                                                                      )
+                                                                                ],
+                                    Operations::TAKE_UP_CALL                  =>['id' => 17,
+                                                                                 'flags' => OperationFlags::URGENT|OperationFlags::HELPER,
+                                                                                 'parameters' => array(array('reqstump',OperationParameterType::TEXT, OperationParameterFlags::MANDATORY,NULL ))
+                                                                                ],
+                                    Operations::GIVE_UP_CALL                  =>['id' => 18,
+                                                                                 'flags' => OperationFlags::URGENT|OperationFlags::HELPER,
+                                                                                 'parameters' => array(array('reqstump',OperationParameterType::TEXT, OperationParameterFlags::MANDATORY,NULL ))
+                                                                                ],
+                                    Operations::PULSE                         =>['id' => 19,
+                                                                                 'flags' => OperationFlags::USER|OperationFlags::HELPER,
+                                                                                 'parameters' => array(array('sh',OperationParameterType::DOUBLE, OperationParameterFlags::NO_FLAGS,NULL ),
+                                                                                                       array('dl',OperationParameterType::DOUBLE, OperationParameterFlags::NO_FLAGS,NULL ),
+                                                                                                       array('state',OperationParameterType::DIGIT, OperationParameterFlags::NO_FLAGS,NULL ),
+                                                                                                      )
+                                                                                ],
+                                    Operations::CHANGE_CONTACT_DATA           =>['id' => 20,
+                                                                                 'flags' => OperationFlags::URGENT|OperationFlags::ADMIN|OperationFlags::USER|OperationFlags::HELPER,
+                                                                                 'parameters' => array(array('stump',OperationParameterType::TEXT, OperationParameterFlags::MANDATORY,NULL ),
+                                                                                                       array('mail', OperationParameterType::MAIL, OperationParameterFlags::NO_FLAGS,NULL),
+                                                                                                       array('phone',OperationParameterType::PHONE, OperationParameterFlags:: NO_FLAGS ,NULL )
+                                                                                                      )
+                                                                                ],
+                                    Operations::CHANGE_PROFILE_DATA           =>['id' => 21,
+                                                                                 'flags' => OperationFlags::URGENT|OperationFlags::ADMIN|OperationFlags::USER|OperationFlags::HELPER,
+                                                                                 'parameters' => array(array('stump',OperationParameterType::TEXT, OperationParameterFlags::MANDATORY,NULL ),
+                                                                                                       array('data_string',OperationParameterType::TEXT, OperationParameterFlags::MANDATORY,NULL )
+                                                                                                      )  
+                                                                                ],
+//                                    Operations::CHANGE_RIGHTS                 =>['id' => 22, [deprecated]
+//                                                                                 'flags' => OperationFlags::URGENT|OperationFlags::ADMIN,
+//                                                                                 'parameters' => array(array('stump',OperationParameterType::TEXT, OperationParameterFlags::MANDATORY,NULL ),
+//                                                                                                       array('rights',OperationParameterType::DIGIT, OperationParameterFlags::MANDATORY,NULL )
+//                                                                                                      )  
+//                                                                                ],
+                                    Operations::CHANGE_PASSWORD               =>['id' => 26,
+                                                                                 'flags' => OperationFlags::URGENT|OperationFlags::ADMIN|OperationFlags::USER|OperationFlags::HELPER,
+                                                                                 'parameters' => array(array('stump',OperationParameterType::TEXT, OperationParameterFlags::MANDATORY,NULL ),
+                                                                                                       array('pass' ,OperationParameterType::TEXT, OperationParameterFlags::NO_FLAGS,NULL )
+                                                                                                      )
+                                                                                ],
+                                    Operations::RESTORE_PASSWORD              =>['id' => 27,
+                                                                                 'flags' => OperationFlags::URGENT|OperationFlags::USER|OperationFlags::HELPER,
+                                                                                 'parameters' => array(array('key',OperationParameterType::TEXT, OperationParameterFlags::MANDATORY,NULL ),
+                                                                                                       array('lmp',OperationParameterType::TEXT, OperationParameterFlags::MANDATORY,NULL )
+                                                                                                      )
+                                                                                ],
+                                    Operations::GET_REQUEST_BY_PHONE          =>['id' => 27,
+                                                                                 'flags' => OperationFlags::URGENT|OperationFlags::ADMIN,
+                                                                                 'parameters' => array(array('user_phone',OperationParameterType::PHONE, OperationParameterFlags::MANDATORY,NULL ) )
+                                                                                ],
+                                    Operations::GET_HELPERS_CANDIDATES_COUNT  =>['id' => 28,
+                                                                                 'flags' => OperationFlags::URGENT|OperationFlags::ADMIN,
+                                                                                 'parameters' => array()
+                                                                                ],
+                                    Operations::GET_HELPERS_CANDIDATES_LIST   =>['id' => 29,
+                                                                                 'flags' => OperationFlags::URGENT|OperationFlags::ADMIN,
+                                                                                 'parameters' => array( 
+                                                                                                        array('offset',OperationParameterType::DIGIT, OperationParameterFlags::MANDATORY, 0),
+                                                                                                        array('count' ,OperationParameterType::DIGIT, OperationParameterFlags::MANDATORY, 100)
+                                                                                                      )
+                                                                                ],
+                                    Operations::GET_HELPERS_IN_REGION         =>['id' => 30, //sh1 dl1 sh2 dl2 cats 
+                                                                                 'flags' => OperationFlags::URGENT|OperationFlags::ADMIN,
+                                                                                 'parameters' => array(
+                                                                                                       array('sh1',OperationParameterType::DOUBLE, OperationParameterFlags::MANDATORY,NULL ),
+                                                                                                       array('dl1',OperationParameterType::DOUBLE, OperationParameterFlags::MANDATORY,NULL ),
+                                                                                                       array('sh2',OperationParameterType::DOUBLE, OperationParameterFlags::MANDATORY,NULL ),
+                                                                                                       array('dl2',OperationParameterType::DOUBLE, OperationParameterFlags::MANDATORY,NULL ),
+                                                                                                       array('cats',OperationParameterType::DOUBLE, OperationParameterFlags::NO_FLAGS, 0 )
+                                                                                                      )
+                                                                                ],  
+                                    Operations::SET_HELPERS_DATA_CHECKED      =>['id' => 31,
+                                                                                 'flags' => OperationFlags::URGENT|OperationFlags::ADMIN,
+                                                                                 'parameters' => array(
+                                                                                                      array('stump',OperationParameterType::TEXT, OperationParameterFlags::MANDATORY,NULL ),
+                                                                                                      array('ok',OperationParameterType::DIGIT, OperationParameterFlags::NO_FLAGS, 1 )
+                                                                                                 )
+                                                                                ],
+                                    Operations::ADMITT_HELPER                 =>['id' => 32,
+                                                                                 'flags' => OperationFlags::URGENT|OperationFlags::ADMIN,
+                                                                                 'parameters' => array(
+                                                                                                      array('stump',OperationParameterType::TEXT, OperationParameterFlags::MANDATORY,NULL ),
+                                                                                                      array('ok',OperationParameterType::DIGIT, OperationParameterFlags::NO_FLAGS, 1 )
+                                                                                                 )
+                                                                                ],
+                               Operations::SET_HELPER_DATA_CHECKED_AND_ADMITT =>['id' => 33,
+                                                                                 'flags' => OperationFlags::URGENT|OperationFlags::ADMIN,
+                                                                                 'parameters' => array(
+                                                                                                      array('stump',OperationParameterType::TEXT, OperationParameterFlags::MANDATORY,NULL ),
+                                                                                                      array('cheched',OperationParameterType::DIGIT, OperationParameterFlags::NO_FLAGS, 1 ),
+                                                                                                      array('admitt',OperationParameterType::DIGIT, OperationParameterFlags::NO_FLAGS, 1 )
+                                                                                                 )
+                                                                                ] 
+				]; //$metadata   
+        
+        static function getOperationsSemantics()
+        {
+            $result = [];
+            foreach (Operations::$metadata as $key => $value){
+                $id = $value['id'];
+                $argsStrEntryes = array();
+                foreach ($value['parameters'] as $value) {
+                    $argsStrEntryes[] = $value[0];
+                }
+                $argsStr = implode(",",$argsStrEntryes);
+                $result[] = "$id: $key($argsStr)";
+            }
+            return $result;
+        }
+									   
+        static function initializeArgsValidators()
 	{
-		//------general--------------------
-		CONST LOGIN       = "login";
-		CONST _EXIT       = "exit";
-		CONST LOGOUT      = "logout";
-		CONST REGISTRATE    = "registrate";
-		CONST CREATE_USER = "create_user";
-		CONST DELETE_USER = "delete_user";
-		CONST DELETE_USER_CONFIRMATION = "delete_user_confirmation";
-		CONST GET_USER    = "get_user";
-		CONST CHANGE_USER = "change_user";
-		CONST CHANGE_PASSWORD = "change_password";
-		CONST GET_USER_INFO = "get_user_info";
-		CONST SET_USER_INFO = "set_user_info";
-		CONST SET_USER_INFO_EX = "set_user_info_ex";
-		CONST SET_USER_INFO_FIELD = "set_user_info_field";
-		
-		CONST GET_USERS_COUNT = "get_users_count";
-		CONST GET_USERS_LIST  = "get_users_list";
-		//------asking for help------------
-		CONST ADD_REQUEST   = "add_request";
-		CONST CHANGE_REQUEST = "change_request";
-		CONST CLOSE_REQUEST = "close_request";
-		CONST GET_CURRENT_REQUEST = "get_current_request";
-		//------helpers--------------------
-		CONST GET_REQUESTS_LIST = "get_requests_list";
-		CONST TAKE_UP_CALL = "take_up_call";
-		CONST GIVE_UP_CALL = "give_up_call";
-		
-		//----------parameters count---------------------------	
-		CONST LOGIN_PARAMETERS_COUNT = 3; //login pass
-		CONST EXIT_PARAMETERS_COUNT  = 0; //no
-		CONST LOGOUT_PARAMETERS_COUNT  = 0; //no
-		CONST REGISTRATE_PARAMETERS_COUNT = 5;//key login pass mail phone 
-		CONST CREATE_USER_PARAMETERS_COUNT = 5; //type login pass mail phone
-		CONST DELETE_USER_PARAMETERS_COUNT = 1; //stump
-		CONST DELETE_USER_CONFIRMATION_PARAMETERS_COUNT = 1; //stump
-		CONST GET_USER_PARAMETERS_COUNT = 4;//type login mail phone
-		CONST CHANGE_USER_PARAMETERS_COUNT = 3; //login parameter[s] value[s]
-		CONST CHANGE_PASSWORD_PARAMETERS_COUNT = 2;//stump pass
-		CONST GET_USER_INFO_PARAMETERS_COUNT = 1; //stump
-		CONST SET_USER_INFO_PARAMETERS_COUNT = 8;//stump mail phone name sName fName birth birth_time ?
-		CONST SET_USER_INFO_EX_PARAMETERS_COUNT = 2;
-		CONST SET_USER_INFO_FIELD_PARAMETERS_COUNT = 3;//stump field value
-		CONST GET_USERS_COUNT_PARAMETERS_COUNT = 1;//type
-		CONST GET_USERS_LIST_PARAMETERS_COUNT  = 3;//type offset count
-		
-		CONST ADD_REQUEST_PARAMETERS_COUNT = 7; //sh dl cats specats help_req reward text 
-		CONST CHANGE_REQUEST_PARAMETERS_COUNT = 9;//stump name sh dl cats specats help_req reward text
-		CONST GET_CURRENT_REQUEST_PARAMETERS_COUNT = 0; //no
-		CONST CLOSE_REQUEST_PARAMETERS_COUNT = 2;//stump result 
-		
-		//------helpers--------------------
-		CONST GET_REQUESTS_LIST_PARAMETERS_COUNT = 5;//sh dl cats specats sort
-		CONST TAKE_UP_CALL_PARAMETERS_COUNT = 1;//reqstump
-		CONST GIVE_UP_CALL_PARAMETERS_COUNT = 1;//reqstump
-		//-------------------
-		
-		public static $argsValidators = [];
-					
-		public static $params_count = [Operations::LOGIN => Operations::LOGIN_PARAMETERS_COUNT,
-		                               Operations::_EXIT => Operations::EXIT_PARAMETERS_COUNT,
-		                               Operations::LOGOUT => Operations::LOGOUT_PARAMETERS_COUNT,
-		                               Operations::REGISTRATE => Operations::REGISTRATE_PARAMETERS_COUNT,
-									   Operations::CREATE_USER => Operations::CREATE_USER_PARAMETERS_COUNT,
-									   Operations::DELETE_USER => Operations::DELETE_USER_PARAMETERS_COUNT,
-									   Operations::DELETE_USER_CONFIRMATION => Operations::DELETE_USER_CONFIRMATION_PARAMETERS_COUNT,
-									   Operations::GET_USER => Operations::GET_USER_PARAMETERS_COUNT,
-									   Operations::GET_USER_INFO => Operations::GET_USER_INFO_PARAMETERS_COUNT,
-									   Operations::SET_USER_INFO => Operations::SET_USER_INFO_PARAMETERS_COUNT,
-									   Operations::SET_USER_INFO_EX => Operations::SET_USER_INFO_EX,
-									   Operations::SET_USER_INFO_FIELD => Operations::SET_USER_INFO_FIELD_PARAMETERS_COUNT,
-									   Operations::CHANGE_USER => Operations::CHANGE_USER_PARAMETERS_COUNT,
-									   
-									   Operations::GET_USERS_COUNT => Operations::GET_USERS_COUNT_PARAMETERS_COUNT,
-									   Operations::GET_USERS_LIST => Operations::GET_USERS_LIST_PARAMETERS_COUNT,
-									   
-									   Operations::ADD_REQUEST => Operations::ADD_REQUEST_PARAMETERS_COUNT,
-									   Operations::CHANGE_REQUEST => Operations::CHANGE_REQUEST_PARAMETERS_COUNT,
-									   Operations::GET_CURRENT_REQUEST => Operations::GET_CURRENT_REQUEST_PARAMETERS_COUNT,
-									   Operations::CLOSE_REQUEST => Operations::CLOSE_REQUEST_PARAMETERS_COUNT,
-									   Operations::GET_REQUESTS_LIST => Operations::GET_REQUESTS_LIST_PARAMETERS_COUNT,
-									   Operations::TAKE_UP_CALL => Operations::TAKE_UP_CALL_PARAMETERS_COUNT,
-									   Operations::GIVE_UP_CALL => Operations::GIVE_UP_CALL_PARAMETERS_COUNT
-									   ];	
-									   
-		static function initializeArgsValidators()
-		{
-			if( count(Operations::$argsValidators) == 0 ){
-				Operations::$argsValidators[Operations::LOGIN] = function($args){return count($args) == Operations::LOGIN_PARAMETERS_COUNT;};
-				Operations::$argsValidators[Operations::_EXIT] = function($args){return TRUE;};
-		        Operations::$argsValidators[Operations::LOGOUT] = function($args){return TRUE;};
-		        
-		        Operations::$argsValidators[Operations::REGISTRATE] = function($args){return count($args) == Operations::REGISTRATE_PARAMETERS_COUNT;};
-				Operations::$argsValidators[Operations::CREATE_USER] = function($args){return count($args) == Operations::CREATE_USER_PARAMETERS_COUNT;};
-				Operations::$argsValidators[Operations::DELETE_USER] = function($args){return count($args) == Operations::DELETE_USER_PARAMETERS_COUNT;};
-				Operations::$argsValidators[Operations::DELETE_USER_CONFIRMATION] = function($args){return FALSE;};
-				Operations::$argsValidators[Operations::GET_USER] = function($args){return count($args) == Operations::GET_USER_PARAMETERS_COUNT;};
-				Operations::$argsValidators[Operations::GET_USER_INFO] = function($args){return count($args) == Operations::GET_USER_INFO_PARAMETERS_COUNT;};
-				Operations::$argsValidators[Operations::SET_USER_INFO] = function($args){return count($args) == Operations::SET_USER_INFO_PARAMETERS_COUNT;};
-				Operations::$argsValidators[Operations::SET_USER_INFO_EX] = function($args){return count($args) == Operations::SET_USER_INFO_EX_PARAMETERS_COUNT;};
-				Operations::$argsValidators[Operations::SET_USER_INFO_FIELD] = function($args){return count($args) == Operations::SET_USER_INFO_FIELD_PARAMETERS_COUNT;};
-				Operations::$argsValidators[Operations::CHANGE_USER] = function($args){return count($args) == Operations::CHANGE_USER_PARAMETERS_COUNT;};
-					
-				Operations::$argsValidators[Operations::CHANGE_PASSWORD] = function($args){return count($args) == Operations::CHANGE_PASSWORD_PARAMETERS_COUNT;};
-				Operations::$argsValidators[Operations::GET_USERS_COUNT] = function($args){return count($args) == Operations::GET_USERS_COUNT_PARAMETERS_COUNT;};
-				Operations::$argsValidators[Operations::GET_USERS_LIST] = function($args){return count($args) == Operations::GET_USERS_LIST_PARAMETERS_COUNT;};
-				Operations::$argsValidators[Operations::ADD_REQUEST] = function($args){return count($args) == Operations::ADD_REQUEST_PARAMETERS_COUNT;};
-				Operations::$argsValidators[Operations::CHANGE_REQUEST] = function($args){return count($args) == Operations::CHANGE_REQUEST_PARAMETERS_COUNT;};
-				Operations::$argsValidators[Operations::GET_CURRENT_REQUEST] = function($args){return count($args) == Operations::GET_CURRENT_REQUEST_PARAMETERS_COUNT;};
-				Operations::$argsValidators[Operations::CLOSE_REQUEST] = function($args){return count($args) == Operations::CLOSE_REQUEST_PARAMETERS_COUNT;};
-				Operations::$argsValidators[Operations::GET_REQUESTS_LIST] = function($args){return count($args) == Operations::GET_REQUESTS_LIST_PARAMETERS_COUNT;};
-				Operations::$argsValidators[Operations::TAKE_UP_CALL] = function($args){return count($args) == Operations::TAKE_UP_CALL_PARAMETERS_COUNT;};
-				Operations::$argsValidators[Operations::GIVE_UP_CALL] = function($args){return count($args) == Operations::GIVE_UP_CALL_PARAMETERS_COUNT;};
-			}
-		}	
-	}
+            if( count(Operations::$argsValidators) == 0 ){
+                foreach (Operations::$metadata as $key => $value) {
+                    Operations::$argsValidators[$key] = new OperationValidator($value);
+                }
+            }
+	}	
+    }
 
 //---------------------------------------------------------------------------------------
-	class Operation
+    class Operation
+    {
+	public $operationString;
+	public $operation = "";
+	public $args = [];
+        public $metadata = [];
+        public $isValid = FALSE;
+        
+        public function __construct($operationString)
 	{
-		public $operationString;
-		public $operation = "";
-		public $args = [];
-		public $isValid = FALSE;
-	
-		public function __construct($operationString)
-		{
-			Operations::initializeArgsValidators();
-			$this->operationString = $operationString;
-			$argString = "";
-			$obracePos = strpos( $this->operationString,"(");
-			$cobracePos = strpos( $this->operationString,")");
-				
-			if( $obracePos != FALSE and $cobracePos!=FALSE ){
-				$this->operation = substr($this->operationString,0,$obracePos);
-				$argString = substr($this->operationString,$obracePos+1,$cobracePos-($obracePos+1) );
-				$this->operation = strtolower($this->operation);
-				$argString = rtrim( ltrim($argString) );
-				$argsVals = array();
-								
-				if( strlen($argString) > 0 ){
-					$argsVals = explode(",",$argString);
-				}
-				
-				//echo $argString."<br>".$this->operation."<br>".var_dump($argsVals); 
-				//echo var_dump(Operations::$params_count);
-				
-				$ok = FALSE;
-				//temporary here, because this is common code block for all operations
-				for($i = 0; $i < count($argsVals); $i++){
-					$this->args[$i] = $argsVals[$i];	
-				}
-				
-				if( array_key_exists($this->operation,Operations::$params_count) ){
-					if( Operations::$argsValidators[$this->operation]($this->args) ){
-						$ok = TRUE;
-					}
-					else{
-						throw new ProcessingExeption(ErrorCodes::OPERATION_PARAMETERS_MISMATCH,"bad parameters count in requested operation:".$this->operationString,$this->operation,__METHOD__);
-					}
-				}
-				else{
-					throw new ProcessingExeption(ErrorCodes::OPERATION_UNSUPPORTED,"unknown operation:".$this->operationString,$this->operation,__METHOD__);
-				}
-				$this->isValid = $ok;
-			}		
+            Operations::initializeArgsValidators();
+            $this->operationString = $operationString;
+            $argString = "";
+            $obracePos = strpos( $this->operationString,"(");
+            $cobracePos = strpos( $this->operationString,")");
+			
+            if( $obracePos != FALSE and $cobracePos!=FALSE ){
+                //TODO: do not assing object internal data until ok is TRUE
+                $operationName = strtolower( substr($this->operationString,0,$obracePos) );
+                $argString = rtrim( ltrim( substr($this->operationString,$obracePos+1,$cobracePos-($obracePos+1) ) ) );
+		$argsVals = array();
+		if( strlen($argString) > 0 ){
+                    $argsVals = explode(",",$argString);
 		}
-	}
+                                					
+		$ok = FALSE;				
+		if( array_key_exists($operationName,Operations::$argsValidators) ){
+                    $this->operation = $operationName;
+                    if( Operations::$argsValidators[$operationName]->validate( $argsVals ) ){
+                        $this->metadata =  Operations::$metadata[$operationName];
+                        $this->args = $argsVals;
+                        $ok = TRUE;
+                    }
+                    else{
+                        throw new ProcessingExeption(ErrorCodes::OPERATION_PARAMETERS_MISMATCH,"bad arguments:".$this->operationString,$this->operation,__FILE__.__LINE__);
+                    }
+                }
+                else{
+                    throw new ProcessingExeption(ErrorCodes::OPERATION_UNSUPPORTED,"unknown operation:".$this->operationString,"",__FILE__.__LINE__);
+                }
+                $this->isValid = $ok;
+            }		
+        }
+        
+        public function getArg($index, &$ref)
+        {
+            if( array_key_exists($index, $this->args) ){
+                $ref = $this->args[$index];
+            }
+        }
+        
+    }
 ?>

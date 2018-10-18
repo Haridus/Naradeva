@@ -25,7 +25,8 @@ class Mysql extends BaseAdapter
             $connectionString .= ";unix_socket={$config['unix_socket']}";
         }
 
-		$connection = new PDO($connectionString,$config['username'], $config['password'], $config['options']);
+        $connection = new PDO($connectionString,$config['username'], $config['password'], $config['options']);
+        //$connection->inTransaction();
 		//$connection->errorCode();
 		//$connection->errorInfo();
 		//$connection->commit();
